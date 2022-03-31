@@ -2,7 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const parser = require('body-parser');
 const mongoose = require('mongoose');
-const encrypt = require('mongoose-encryption');
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 mongoose.connect('mongodb://localhost:27017/authDB');
 
@@ -10,10 +11,6 @@ const userSchema = new mongoose.Schema({
     email: String,
     password: String
 });
-
-const secret = process.env.SECRET;
-
-userSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] });
 
 const User = mongoose.model('User', userSchema);
 
@@ -37,16 +34,22 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', (req, res) => {
-    const newUser = new User({
-        email: req.body.username,
-        password: req.body.password
-    });
-    newUser.save((err) => {
+    bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
         if (err) {
             res.send(err);
-        }
-        else {
-            res.render('secrets');
+        } else {
+            const newUser = new User({
+                email: req.body.username,
+                password: hash
+            });
+            newUser.save((err) => {
+                if (err) {
+                    res.send(err);
+                }
+                else {
+                    res.render('secrets');
+                }
+            });
         }
     });
 });
@@ -61,11 +64,17 @@ app.post('/login', (req, res) => {
         } else if (!user) {
             res.send("No user found");
         } else {
-            if (user.password === pw) {
-                res.render('secrets');
-            } else {
-                res.send('invalid login');
-            }
+            bcrypt.compare(pw, user.password, (err, result) => {
+                if (err) {
+                    res.send(err);
+                } else {
+                    if (result) {
+                        res.render('secrets');
+                    } else {
+                        res.send('invalid login');
+                    }
+                }
+            });
         }
     });
 });
